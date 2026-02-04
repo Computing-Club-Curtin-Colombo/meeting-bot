@@ -6,7 +6,7 @@ import edge_tts
 import asyncio
 import wave
 import time
-from langdetect import detect
+# from langdetect import detect
 from discord.ext import voice_recv
 from dotenv import load_dotenv
 import json
