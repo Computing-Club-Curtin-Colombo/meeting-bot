@@ -5,5 +5,7 @@ venv/
 
 .env
 
+sessions/
 **/*.wav
 **/*.mp3
+t.py
