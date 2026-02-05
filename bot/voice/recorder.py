@@ -1,6 +1,6 @@
 from typing import Dict
 
-import datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from discord.ext import voice_recv
 
@@ -20,10 +20,10 @@ class Recorder(voice_recv.AudioSink):
         super().__init__()
 
         # ----- Session -----
-        timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="microseconds")
+        timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
         self.session_dir, self.users_dir = create_session_folder()
 
-        self.start_time = datetime.datetime.now()
+        self.start_time = datetime.now()
 
         # ----- Track Storage -----
         self.tracks : Dict[int, UserTrack] = {}
@@ -43,7 +43,7 @@ class Recorder(voice_recv.AudioSink):
 
     def current_offset_ms(self):
 
-        delta = datetime.datetime.now() - self.start_time
+        delta = datetime.now() - self.start_time
         return int(delta.total_seconds() * 1000)
 
     # -----------------------------------------------------

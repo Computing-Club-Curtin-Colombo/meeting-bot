@@ -15,7 +15,10 @@ from bot.utils.config import SPEECH_CACHE_DIR, START_RECORDING_SPEECH, STOP_RECO
 # =========================================================
 
 def create_session_folder(base="sessions"):
-    timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="microseconds")
+    timestamp = (datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
+                 .replace(":", "-")
+                 .replace("+", "_")
+                 )
 
     session_dir = Path(base) / timestamp
     users_dir = session_dir / "users"
@@ -120,7 +123,7 @@ def create_temp_path(path):
 # =========================================================
 
 async def generate_prepared_speech_files(
-    speech_map: dict ={
+    speech_map: dict = {
         "start": START_RECORDING_SPEECH,
         "stop": STOP_RECORDING_SPEECH
     },
