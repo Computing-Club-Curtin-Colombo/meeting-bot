@@ -1,0 +1,20 @@
+Speaker A:
+Hi, did you finish preparing the meeting notes?
+
+Speaker B:
+Not yet. I was working on summarizing yesterday’s discussion about deployment automation.
+
+Speaker A:
+Did you include the part about reducing server response time?
+
+Speaker B:
+Yes, I added the section about optimizing API calls and improving caching performance.
+
+Speaker A:
+Good. Also, remember to include the timeline. The deadline is March fifteenth.
+
+Speaker B:
+Got it. I will finalize the document and share it by tomorrow morning.
+
+Speaker A:
+Perfect. Let me know if you need help reviewing it.

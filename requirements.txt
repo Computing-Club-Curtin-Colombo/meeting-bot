@@ -1,2 +1,7 @@
 discord.py
-edge_tts
+discord-ext-voice-recv
+edge-tts
+faster-whisper
+python-dotenv
+langdetect
+numpy

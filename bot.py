@@ -53,7 +53,7 @@ class Recorder(voice_recv.AudioSink):
         self.running = True
         
         self.join_offsets = {}
-        self.start_time = time.time()
+        self.start_time_ms = int(time.time() * 1000)
 
         # Metadata
         self.metadata = {
@@ -66,7 +66,7 @@ class Recorder(voice_recv.AudioSink):
 
     # ----- Get session elapsed ms -----
     def current_offset_ms(self):
-        return int((time.time() - self.start_time) * 1000)
+        return int(time.time() * 1000) - self.start_time_ms
     
     # ---------- Worker Thread ----------
     def user_worker(self, user_id):

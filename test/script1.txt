@@ -1,0 +1,11 @@
+Hello, this is a single speaker transcription test.
+The goal is to evaluate speech recognition accuracy under normal speaking conditions.
+Today is Thursday, February fifth, twenty twenty-six.
+I am speaking at a steady pace with clear pronunciation.
+
+This test includes numbers like one hundred and twenty-five, and decimal values such as forty-two point seven five.
+It also includes technical words like asynchronous processing, transcription latency, and audio buffering.
+
+I will now pause briefly.
+
+Thank you. This concludes the single speaker test recording.

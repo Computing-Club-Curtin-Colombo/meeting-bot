@@ -9,3 +9,5 @@ sessions/
 **/*.wav
 **/*.mp3
 t.py
+
+speech_cache/
