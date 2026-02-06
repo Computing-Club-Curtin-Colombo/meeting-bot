@@ -37,12 +37,16 @@ def setup_voice_commands(bot: MeetingBot):
             )
             return
 
+        # Defer immediately
+        await interaction.response.defer(ephemeral=True)
+
         bot.recorder = Recorder()
         bot.voice_client.listen(bot.recorder)
         bot.recording = True
-        await interaction.response.send_message(
+        
+        await interaction.followup.send(
             "Recording started",
-            ephemeral=True   # ← ONLY user sees this
+            ephemeral=True
         )
         
         # Stop if already speaking
@@ -58,16 +62,18 @@ def setup_voice_commands(bot: MeetingBot):
     # ---------- Stop Recording ----------
     @bot.tree.command(name="stop", description="Stop recording meeting")
     async def stop(interaction: Interaction):
+        # Defer immediately
+        await interaction.response.defer(ephemeral=True)
+        
         bot.recording = False
 
         if bot.voice_client and bot.voice_client.is_listening():
             bot.voice_client.stop_listening()
 
-            if interaction:
-                await interaction.response.send_message(
-                    "Recording stopped",
-                    ephemeral=True
-                )
+            await interaction.followup.send(
+                "Recording stopped. Processing transcription...",
+                ephemeral=True
+            )
             
             # Stop if already speaking
             if bot.voice_client.is_playing():
@@ -77,6 +83,11 @@ def setup_voice_commands(bot: MeetingBot):
             audio = FFmpegPCMAudio(f"{SPEECH_CACHE_DIR}/stop.mp3")
             bot.voice_client.play(audio)
             
-            # Spawn processing
+            # Spawn processing (non-blocking)
             if bot.recorder:
                 spawn_processing(bot.recorder.session_dir)
+        else:
+            await interaction.followup.send(
+                "No active recording to stop",
+                ephemeral=True
+            )

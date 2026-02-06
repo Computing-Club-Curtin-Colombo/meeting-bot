@@ -80,4 +80,23 @@ async def handle_empty_channel():
 async def run_bot():
     setup_voice_commands(bot)
     setup_tts_commands(bot)
+    
+    # Add cleanup handler
+    @bot.event
+    async def on_close():
+        print("Bot shutting down...")
+        
+        # Stop recording if active
+        if bot.recording and bot.voice_client and bot.voice_client.is_listening():
+            bot.voice_client.stop_listening()
+            
+            # Save recorder data
+            if bot.recorder:
+                bot.recorder.cleanup()
+                spawn_processing(bot.recorder.session_dir)
+        
+        # Disconnect from voice
+        if bot.voice_client:
+            await bot.voice_client.disconnect()
+    
     await bot.start(BOT_TOKEN)

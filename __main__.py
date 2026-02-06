@@ -170,7 +170,39 @@ async def main():
     await run_bot()
 
 if __name__ == "__main__":
+    import signal
+    
+    # Store the bot instance for cleanup
+    bot_instance = None
+    
+    def signal_handler(sig, frame):
+        """Handle Ctrl+C gracefully"""
+        print("\n\nShutting down gracefully...")
+        if bot_instance:
+            # Create new event loop for cleanup if needed
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(bot_instance.close())
+                else:
+                    loop.run_until_complete(bot_instance.close())
+            except:
+                pass
+        sys.exit(0)
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     try:
+        # Import bot after signal handlers are set
+        from bot.client import bot
+        bot_instance = bot
+        
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nBot stopped by user.")
+    except Exception as e:
+        print(f"\nError: {e}")
+        import traceback
+        traceback.print_exc()
