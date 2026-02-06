@@ -1,8 +1,10 @@
 import sqlite3
 import json
+import time
+import requests
 import bot.utils.config as config
 from pathlib import Path
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from faster_whisper import WhisperModel
 
@@ -23,6 +25,7 @@ def init_db(db_path):
         )
         """)
         conn.commit()
+    conn.close()
 
 def insert_transcript(db_path, timestamp, user_id, username, text):
     with get_connection(db_path) as conn:
@@ -34,8 +37,9 @@ def insert_transcript(db_path, timestamp, user_id, username, text):
             (timestamp, str(user_id), username, text)
         )
         conn.commit()
+    conn.close()
 
-def run_transcription(session_dir):
+def run_transcription(session_dir, webhook_url=None):
     session_path = Path(session_dir) if not isinstance(session_dir, Path) else session_dir
     db_path = session_path / "transcriptions.db"
     metadata_path = session_path / "metadata.json"
@@ -123,5 +127,24 @@ def run_transcription(session_dir):
                 dt = datetime.fromisoformat(timestamp)
                 pretty_time = dt.strftime("%Y-%m-%d %H:%M:%S")
                 f.write(f"[{pretty_time}] {username}: {text}\n")
+    
+    conn.close()
             
     print(f"Transcription finished. Full transcript saved to {export_path}")
+
+    # Optional Webhook Delivery
+    if webhook_url:
+        print(f"Sending transcript to Discord via webhook...")
+        try:
+            with open(export_path, "rb") as f:
+                response = requests.post(
+                    webhook_url,
+                    files={"file": ("transcript.txt", f)},
+                    data={"content": f"✅ **Meeting Transcription Complete!**\nSession: `{session_path.name}`"}
+                )
+            if response.status_code < 300:
+                print("Successfully delivered transcript via webhook.")
+            else:
+                print(f"Failed to deliver transcript via webhook: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"Error sending webhook: {e}")
