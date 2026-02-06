@@ -17,10 +17,13 @@ def setup_voice_commands(bot: MeetingBot):
             )
             return
 
+        # Defer immediately
+        await interaction.response.defer(ephemeral=True)
+
         channel = interaction.user.voice.channel
         bot.voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Joined voice channel",
             ephemeral=True
         )
