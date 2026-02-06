@@ -33,7 +33,8 @@ class MeetingBot(commands.Bot):
                 
                 if session.recorder:
                     session.recorder.cleanup()
-                    spawn_processing(session.recorder.session_dir)
+                    webhook_url = session.transcription_webhook.url if session.transcription_webhook else None
+                    spawn_processing(session.recorder.session_dir, webhook_url=webhook_url)
 
             if session.voice_client:
                 await session.voice_client.disconnect()

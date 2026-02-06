@@ -39,7 +39,14 @@ def insert_transcript(db_path, timestamp, user_id, username, text):
         conn.commit()
     conn.close()
 
-def run_transcription(session_dir, webhook_url=None):
+def run_transcription(session_dir, webhook_url=None, process_config=None):
+    # Support for Windows multiprocessing (re-initialize config)
+    if process_config:
+        config.WHISPER_MODEL = process_config.get("model", config.WHISPER_MODEL)
+        config.DEVICE = process_config.get("device", config.DEVICE)
+        config.COMPUTE_TYPE = process_config.get("compute", config.COMPUTE_TYPE)
+        config.HF_CACHE_DIR = process_config.get("cache", config.HF_CACHE_DIR)
+
     session_path = Path(session_dir) if not isinstance(session_dir, Path) else session_dir
     db_path = session_path / "transcriptions.db"
     metadata_path = session_path / "metadata.json"
