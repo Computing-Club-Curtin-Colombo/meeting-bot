@@ -5,4 +5,5 @@ class MeetingBot(commands.Bot):
         super().__init__(*args, **kwargs)
         
         self.voice_client = None
+        self.recording = None
         self.recorder = None

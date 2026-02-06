@@ -4,6 +4,7 @@ from discord.ext import commands
 from bot import MeetingBot
 from bot.commands.voice_commands import setup_voice_commands
 from bot.commands.tts_commands import setup_tts_commands
+from bot.processing.pipeline import spawn_processing
 from bot.utils.config import BOT_TOKEN
 
 intents = discord.Intents.all()
@@ -50,6 +51,9 @@ async def stop_recording():
     if bot.voice_client and bot.voice_client.is_listening():
         bot.voice_client.stop_listening()
         
+        if bot.recorder:
+            spawn_processing(bot.recorder.session_dir)
+        
 
 async def handle_empty_channel():
 
@@ -73,7 +77,7 @@ async def handle_empty_channel():
         await bot.voice_client.disconnect()
 
 
-def run_bot():
+async def run_bot():
     setup_voice_commands(bot)
     setup_tts_commands(bot)
-    bot.run(BOT_TOKEN)
+    await bot.start(BOT_TOKEN)

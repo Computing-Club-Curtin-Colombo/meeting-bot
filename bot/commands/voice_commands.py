@@ -1,6 +1,7 @@
 from bot import MeetingBot
 from bot.utils.config import SPEECH_CACHE_DIR
 from bot.voice.recorder import Recorder
+from bot.processing.pipeline import spawn_processing
 from discord import FFmpegPCMAudio, Interaction
 from discord.ext import voice_recv
 
@@ -36,7 +37,8 @@ def setup_voice_commands(bot: MeetingBot):
             )
             return
 
-        bot.voice_client.listen(Recorder())
+        bot.recorder = Recorder()
+        bot.voice_client.listen(bot.recorder)
         bot.recording = True
         await interaction.response.send_message(
             "Recording started",
@@ -61,16 +63,20 @@ def setup_voice_commands(bot: MeetingBot):
         if bot.voice_client and bot.voice_client.is_listening():
             bot.voice_client.stop_listening()
 
-        if interaction:
-            await interaction.response.send_message(
-                "Recording stopped",
-                ephemeral=True
-            )
-        
-        # Stop if already speaking
-        if bot.voice_client.is_playing():
-            bot.voice_client.stop()
+            if interaction:
+                await interaction.response.send_message(
+                    "Recording stopped",
+                    ephemeral=True
+                )
+            
+            # Stop if already speaking
+            if bot.voice_client.is_playing():
+                bot.voice_client.stop()
 
-        # Play audio using FFmpeg
-        audio = FFmpegPCMAudio(f"{SPEECH_CACHE_DIR}/stop.mp3")
-        bot.voice_client.play(audio)
+            # Play audio using FFmpeg
+            audio = FFmpegPCMAudio(f"{SPEECH_CACHE_DIR}/stop.mp3")
+            bot.voice_client.play(audio)
+            
+            # Spawn processing
+            if bot.recorder:
+                spawn_processing(bot.recorder.session_dir)
