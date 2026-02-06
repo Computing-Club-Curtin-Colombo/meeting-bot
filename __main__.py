@@ -4,7 +4,19 @@ import sys
 import asyncio
 import platform
 import subprocess
+import shutil
 from pathlib import Path
+
+def check_ffmpeg():
+    """Verify that FFmpeg is installed and in PATH."""
+    if shutil.which("ffmpeg") is None:
+        print("\n" + "!"*60)
+        print("CRITICAL WARNING: FFmpeg was not found in your system PATH.")
+        print("The bot will NOT be able to play sounds or process audio.")
+        print("Please install FFmpeg: https://ffmpeg.org/download.html")
+        print("!"*60 + "\n")
+        return False
+    return True
 
 # Try to import dependencies, or provide a way to install them
 try:
@@ -103,6 +115,7 @@ def setup_cuda_env(cuda_path=None):
 
 async def main():
     load_dotenv()
+    check_ffmpeg()
 
     parser = argparse.ArgumentParser(description="Meeting Bot Standalone Entry")
     parser.add_argument("--cpu", action="store_true", help="Force CPU mode")

@@ -21,82 +21,70 @@ async def on_ready():
 @bot.event
 async def on_voice_state_update(member, before, after):
     
-    print(f"Voice state update: {member} | Before: {before.channel} | After: {after.channel}")
+    session = bot.get_session(member.guild.id)
 
-    if bot.voice_client is None:
+    if session.voice_client is None:
         return
 
     # ---- Bot kicked detection ----
     if member == bot.user and after.channel is None:
-        print("Bot was disconnected.")
-        await stop_recording()
+        print(f"Bot was disconnected from {member.guild.name}.")
+        await stop_recording(member.guild.id)
         return
 
     # ---- Empty channel detection ----
-    channel = bot.voice_client.channel
+    channel = session.voice_client.channel
     if channel is None:
         return
 
     humans = [m for m in channel.members if not m.bot]
 
     if len(humans) == 0:
-        await handle_empty_channel()
+        await handle_empty_channel(member.guild.id)
 
 
-async def stop_recording():
+async def stop_recording(guild_id):
+    session = bot.get_session(guild_id)
+    if not session.recording:
+        return
 
+    session.recording = False
 
-    bot.recording = False
-
-    if bot.voice_client and bot.voice_client.is_listening():
-        bot.voice_client.stop_listening()
+    if session.voice_client and session.voice_client.is_listening():
+        session.voice_client.stop_listening()
         
-        if bot.recorder:
-            spawn_processing(bot.recorder.session_dir)
+    if session.recorder:
+        print(f"Cleaning up recorder for guild {guild_id}...")
+        session.recorder.cleanup()
+        
+        webhook_url = session.transcription_webhook.url if session.transcription_webhook else None
+        spawn_processing(session.recorder.session_dir, webhook_url=webhook_url)
+        session.recorder = None
         
 
-async def handle_empty_channel():
-
-    print("Channel empty. Waiting 30 seconds.")
+async def handle_empty_channel(guild_id):
+    session = bot.get_session(guild_id)
+    print(f"Channel in guild {guild_id} empty. Waiting 30 seconds.")
 
     await asyncio.sleep(30)
 
-    if bot.voice_client is None:
+    if session.voice_client is None:
         return
     
-    
+    channel = session.voice_client.channel
+    if channel is None:
+        return
 
-    channel = bot.voice_client.channel
     humans = [m for m in channel.members if not m.bot]
 
     if len(humans) == 0:
-        print("Still empty. Leaving.")
-        if bot.recording:
-            stop_recording()
-            print("Stopped recording.")
-        await bot.voice_client.disconnect()
+        print(f"Still empty in {guild_id}. Leaving.")
+        await stop_recording(guild_id)
+        await session.voice_client.disconnect()
 
 
 async def run_bot():
     setup_voice_commands(bot)
     setup_tts_commands(bot)
-    
-    # Add cleanup handler
-    @bot.event
-    async def on_close():
-        print("Bot shutting down...")
-        
-        # Stop recording if active
-        if bot.recording and bot.voice_client and bot.voice_client.is_listening():
-            bot.voice_client.stop_listening()
-            
-            # Save recorder data
-            if bot.recorder:
-                bot.recorder.cleanup()
-                spawn_processing(bot.recorder.session_dir)
-        
-        # Disconnect from voice
-        if bot.voice_client:
-            await bot.voice_client.disconnect()
     
     await bot.start(BOT_TOKEN)

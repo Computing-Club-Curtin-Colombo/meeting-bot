@@ -11,7 +11,9 @@ def setup_tts_commands(bot: MeetingBot):
     @app_commands.describe(text="Text for bot to speak")
     async def say(interaction: Interaction, text: str):
 
-        if bot.voice_client is None:
+        session = bot.get_session(interaction.guild_id)
+
+        if session.voice_client is None:
             await interaction.response.send_message(
                 "Bot is not in voice channel",
                 ephemeral=True
@@ -22,15 +24,21 @@ def setup_tts_commands(bot: MeetingBot):
             "Speaking...",
             ephemeral=True
         )
+        
+        # Unique filename to avoid race conditions
+        filename = f"speech_{interaction.id}.mp3"
 
         # Generate speech file
         communicate = edge_tts.Communicate(text)
-        await communicate.save("speech.mp3")
+        await communicate.save(filename)
 
         # Stop if already speaking
-        if bot.voice_client.is_playing():
-            bot.voice_client.stop()
+        if session.voice_client.is_playing():
+            session.voice_client.stop()
 
         # Play audio using FFmpeg
-        audio = FFmpegPCMAudio("speech.mp3")
-        bot.voice_client.play(audio)
+        audio = FFmpegPCMAudio(filename)
+        session.voice_client.play(audio)
+        
+        # Optional: cleanup file after playing (though FFmpeg might hold a lock)
+        # For simplicity in this demo, we leave it, but a professional version would use a tempfile.

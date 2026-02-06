@@ -24,7 +24,10 @@ class UserTrack:
     def enqueue(self, pcm):
         now = time()
         gap = now - self.last_packet_time
-        missing_frames = int(gap / 0.02)
+        
+        # Calculate missing frames (20ms per frame)
+        # Cap silence at 30 seconds (1500 frames) to prevent OOM/Disk-fill if clock jumps
+        missing_frames = min(int(gap / 0.02), 1500)
         
         if missing_frames > 1:
             silence = bytes(len(pcm))
@@ -35,9 +38,9 @@ class UserTrack:
         self.last_packet_time = now
 
     def worker(self):
-        while self.running:
+        while self.running or not self.queue.empty():
             try:
-                pcm = self.queue.get(timeout=1)
+                pcm = self.queue.get(timeout=0.1)
                 self.wav.writeframes(pcm)
             except queue.Empty:
                 continue

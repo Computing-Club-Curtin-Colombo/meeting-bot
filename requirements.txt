@@ -5,3 +5,4 @@ faster-whisper
 python-dotenv
 psutil
 numpy
+requests
