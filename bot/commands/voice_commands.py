@@ -1,5 +1,5 @@
 from bot import MeetingBot
-from bot.utils.config import SPEECH_CACHE_DIR
+import bot.utils.config as config
 from bot.voice.recorder import Recorder
 from bot.processing.pipeline import spawn_processing
 from discord import FFmpegPCMAudio, Interaction
@@ -57,7 +57,7 @@ def setup_voice_commands(bot: MeetingBot):
             bot.voice_client.stop()
 
         # Play audio using FFmpeg
-        audio = FFmpegPCMAudio(f"{SPEECH_CACHE_DIR}/start.mp3")
+        audio = FFmpegPCMAudio(f"{config.SPEECH_CACHE_DIR}/start.mp3")
         bot.voice_client.play(audio)
 
 
@@ -83,12 +83,16 @@ def setup_voice_commands(bot: MeetingBot):
                 bot.voice_client.stop()
 
             # Play audio using FFmpeg
-            audio = FFmpegPCMAudio(f"{SPEECH_CACHE_DIR}/stop.mp3")
+            audio = FFmpegPCMAudio(f"{config.SPEECH_CACHE_DIR}/stop.mp3")
             bot.voice_client.play(audio)
             
             # Spawn processing (non-blocking)
             if bot.recorder:
-                spawn_processing(bot.recorder.session_dir)
+                print("model:", config.WHISPER_MODEL)
+                print("device:", config.DEVICE)
+                print("compute:", config.COMPUTE_TYPE)
+                
+                spawn_processing(bot.recorder.session_dir, config.WHISPER_MODEL, config.DEVICE, config.COMPUTE_TYPE, config.HF_CACHE_DIR)
         else:
             await interaction.followup.send(
                 "No active recording to stop",

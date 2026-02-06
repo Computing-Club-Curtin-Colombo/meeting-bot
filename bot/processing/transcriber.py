@@ -2,7 +2,8 @@ import sqlite3
 import json
 import bot.utils.config as config
 from pathlib import Path
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
+import time
 from zoneinfo import ZoneInfo
 from faster_whisper import WhisperModel
 
@@ -35,7 +36,7 @@ def insert_transcript(db_path, timestamp, user_id, username, text):
         )
         conn.commit()
 
-def run_transcription(session_dir):
+def run_transcription(session_dir, whisper_model, device, compute_type, hf_cache_dir):
     session_path = Path(session_dir) if not isinstance(session_dir, Path) else session_dir
     db_path = session_path / "transcriptions.db"
     metadata_path = session_path / "metadata.json"
@@ -56,12 +57,12 @@ def run_transcription(session_dir):
     session_start = datetime.fromisoformat(metadata["session_start"])
 
     # Load model with dynamic settings from config
-    print(f"Loading Whisper model: {config.WHISPER_MODEL} on {config.DEVICE}...")
+    print(f"Loading Whisper model: {whisper_model} on {device}...")
     model = WhisperModel(
-        config.WHISPER_MODEL,
-        device=config.DEVICE,
-        compute_type=config.COMPUTE_TYPE,
-        download_root=config.HF_CACHE_DIR
+        whisper_model,
+        device=device,
+        compute_type=compute_type,
+        download_root=hf_cache_dir
     )
 
     # Process user audio files based on metadata
