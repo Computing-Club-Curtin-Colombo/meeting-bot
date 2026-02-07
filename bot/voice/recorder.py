@@ -21,7 +21,7 @@ from utils.logger import logger
 
 class Recorder(voice_recv.AudioSink):
 
-    def __init__(self, channel=None):
+    def __init__(self, channel=None, title=None):
         super().__init__()
 
         # ----- Session -----
@@ -36,10 +36,10 @@ class Recorder(voice_recv.AudioSink):
         # ----- Metadata -----
         self.metadata = {
             "session_start": timestamp,
+            "title": title,
             "channel": {
                 "id": str(channel.id) if channel else None,
                 "name": channel.name if channel else None,
-                "status": getattr(channel, "status", None),
                 "category_id": str(channel.category.id) if channel and channel.category else None,
                 "category_name": channel.category.name if channel and channel.category else None
             },
@@ -101,17 +101,7 @@ class Recorder(voice_recv.AudioSink):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_offset ON events(offset_ms)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user ON events(user_id)")
 
-        # Table for channel-wide updates (like status changes)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS channel_updates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                offset_ms INTEGER NOT NULL,
-                event_type TEXT NOT NULL,
-                before_value TEXT,
-                after_value TEXT
-            )
-        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user ON events(user_id)")
         
         # Table for meeting notes (user messages in the meeting thread)
         cursor.execute("""
@@ -144,14 +134,8 @@ class Recorder(voice_recv.AudioSink):
     # Event Logging
     # -----------------------------------------------------
     
-    def log_channel_update(self, event_type, before_value, after_value):
-        """Push a channel-wide update to the background logging queue"""
-        timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
-        offset_ms = self.current_offset_ms()
-        
-        data = (timestamp, offset_ms, event_type, str(before_value), str(after_value))
-        self.event_queue.put(("channel_updates", data))
-        logger.debug(f"Queued channel update: {event_type} -> {after_value}")
+    # Event Logging
+    # -----------------------------------------------------
 
     def log_event(self, member, before, after):
         """Push a voice state transition to the background logging queue"""
@@ -212,11 +196,6 @@ class Recorder(voice_recv.AudioSink):
                             after_self_video, after_suppress, after_afk, after_requested_to_speak_at
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, data)
-                elif table == "channel_updates":
-                    cursor.execute("""
-                        INSERT INTO channel_updates (timestamp, offset_ms, event_type, before_value, after_value)
-                        VALUES (?, ?, ?, ?, ?)
                     """, data)
                 elif table == "notes":
                     cursor.execute("""

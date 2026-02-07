@@ -57,7 +57,8 @@ def setup_voice_commands(bot: MeetingBot):
 
     # ---------- Start Recording ----------
     @bot.tree.command(name="record", description="Start recording meeting")
-    async def record(interaction: Interaction):
+    @discord.app_commands.describe(title="Optional title for the meeting")
+    async def record(interaction: Interaction, title: str = None):
         # Defer immediately
         await interaction.response.defer(ephemeral=True)
         
@@ -71,8 +72,8 @@ def setup_voice_commands(bot: MeetingBot):
             )
             return
 
-        logger.info(f"Initializing recording session for channel: {voice_client.channel.name}")
-        bot.recorder = Recorder(channel=voice_client.channel)
+        logger.info(f"Initializing recording session for channel: {voice_client.channel.name} (Title: {title})")
+        bot.recorder = Recorder(channel=voice_client.channel, title=title)
         
         logger.debug(f"Recorder initialized. Session Path: {bot.recorder.session_dir}")
         
@@ -106,7 +107,12 @@ def setup_voice_commands(bot: MeetingBot):
             now = datetime.now()
             day = now.day
             suffix = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-            thread_title = f"Meeting Notes [{day}{suffix} {now.strftime('%b, %Y | %H:%M')}]"
+            date_str = f"{day}{suffix} {now.strftime('%b, %Y | %H:%M')}"
+            
+            if title:
+                thread_title = f"{title} ({date_str})"
+            else:
+                thread_title = date_str
             
             thread = await target_channel.create_thread(
                 name=thread_title,

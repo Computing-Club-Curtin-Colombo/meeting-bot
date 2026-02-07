@@ -51,24 +51,6 @@ async def on_ready():
     logger.info(f"Synced {len(synced)} command(s): {[cmd.name for cmd in synced]}")
     logger.info(f"Logged in as {bot.user}")
     
-@bot.event
-async def on_guild_channel_update(before, after):
-    # Log channel updates (like status changes) if recording
-    if bot.recording and bot.recorder:
-        our_channel = bot.voice_client.channel if bot.voice_client else None
-        if our_channel and after.id == our_channel.id:
-            # Check for status change
-            before_status = getattr(before, "status", None)
-            after_status = getattr(after, "status", None)
-            
-            if before_status != after_status:
-                bot.recorder.log_channel_update("status_change", before_status, after_status)
-            
-            # Check for name change
-            if before.name != after.name:
-                bot.recorder.log_channel_update("name_change", before.name, after.name)
-
-
 # ---------- Auto Leave When Alone ----------
 @bot.event
 async def on_voice_state_update(member, before, after):
