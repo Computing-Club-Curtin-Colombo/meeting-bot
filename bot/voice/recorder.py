@@ -21,8 +21,13 @@ from utils.logger import logger
 
 class Recorder(voice_recv.AudioSink):
 
-    def __init__(self, channel=None, title=None):
+    def __init__(self, channel=None, title=None, model=None, device=None, compute_type=None):
         super().__init__()
+        
+        from bot.utils import config
+        self.model = model or config.WHISPER_MODEL
+        self.device = device or config.DEVICE
+        self.compute_type = compute_type or config.COMPUTE_TYPE
 
         # ----- Session -----
         timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
@@ -37,6 +42,11 @@ class Recorder(voice_recv.AudioSink):
         self.metadata = {
             "session_start": timestamp,
             "title": title,
+            "whisper": {
+                "model": self.model,
+                "device": self.device,
+                "compute_type": self.compute_type
+            },
             "channel": {
                 "id": str(channel.id) if channel else None,
                 "name": channel.name if channel else None,

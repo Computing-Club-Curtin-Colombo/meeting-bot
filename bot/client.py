@@ -105,13 +105,19 @@ async def stop_recording():
         # First, ensure the recorder saves its metadata
         bot.recorder.cleanup()
         
-        # Then spawn processing with ALL required arguments
+        # Pull settings from metadata if possible
         from bot.utils import config
+        w_meta = bot.recorder.metadata.get("whisper", {})
+        w_model = w_meta.get("model", config.WHISPER_MODEL)
+        w_device = w_meta.get("device", config.DEVICE)
+        w_compute = w_meta.get("compute_type", config.COMPUTE_TYPE)
+
+        # Then spawn processing with ALL required arguments
         spawn_processing(
             bot.recorder.session_dir, 
-            config.WHISPER_MODEL, 
-            config.DEVICE, 
-            config.COMPUTE_TYPE, 
+            w_model, 
+            w_device, 
+            w_compute, 
             config.HF_CACHE_DIR
         )
         
