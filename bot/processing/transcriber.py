@@ -44,6 +44,9 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
     for _ in range(5):  # Retry mechanism for file access
         if metadata_path.exists():
             break
+        elif _ == 4:
+             raise FileNotFoundError(f"metadata.json not found at {metadata_path} after multiple attempts.")
+         
         print(f"Waiting for metadata.json to be available at {metadata_path}...")
         time.sleep(2)
 
@@ -64,6 +67,7 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
         compute_type=compute_type,
         download_root=hf_cache_dir
     )
+    print("Model loaded successfully. Starting transcription...")
 
     # Process user audio files based on metadata
     for user_id, user_info in metadata["users"].items():

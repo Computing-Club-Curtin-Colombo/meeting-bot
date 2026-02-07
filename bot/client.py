@@ -13,7 +13,9 @@ bot = MeetingBot(command_prefix="?", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
+    print(f"Syncing commands...")
+    synced = await bot.tree.sync()
+    print(f"Synced {len(synced)} command(s): {[cmd.name for cmd in synced]}")
     print(f"Logged in as {bot.user}")
     
 # ---------- Auto Leave When Alone ----------

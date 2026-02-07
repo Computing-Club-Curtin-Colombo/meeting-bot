@@ -14,6 +14,14 @@ def setup_signal_handlers(bot_instance):
     def signal_handler(sig, frame):
         """Handle Ctrl+C gracefully"""
         print("\n\nShutting down gracefully...")
+        
+        # Terminate any active transcription processes
+        try:
+            from bot.processing.pipeline import terminate_all_processes
+            terminate_all_processes()
+        except Exception as e:
+            print(f"Error terminating processes: {e}")
+        
         if bot_instance:
             # Create new event loop for cleanup if needed
             try:

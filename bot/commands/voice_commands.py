@@ -6,6 +6,24 @@ from discord import FFmpegPCMAudio, Interaction
 from discord.ext import voice_recv
 
 def setup_voice_commands(bot: MeetingBot):
+    
+    def get_voice_client(guild):
+        """Get the bot's voice client from Discord API, not from stored variable"""
+        if not guild:
+            return None
+        
+        # Check if bot is in a voice channel according to Discord
+        if guild.me.voice is None:
+            return None
+        
+        # Get the actual voice client from Discord's state
+        voice_client = guild.voice_client
+        
+        # Verify it's connected
+        if voice_client and voice_client.is_connected():
+            return voice_client
+        
+        return None
 
     # ---------- Join Command ----------
     @bot.tree.command(name="join", description="Make the bot join your voice channel")
@@ -33,9 +51,12 @@ def setup_voice_commands(bot: MeetingBot):
     @bot.tree.command(name="record", description="Start recording meeting")
     async def record(interaction: Interaction):
         
-        if bot.voice_client is None:
+        # Get voice client from Discord API
+        voice_client = get_voice_client(interaction.guild)
+        
+        if voice_client is None:
             await interaction.response.send_message(
-                "Bot not in voice channel!",
+                "Bot not in voice channel! Use `/join` first.",
                 ephemeral=True
             )
             return
@@ -43,8 +64,8 @@ def setup_voice_commands(bot: MeetingBot):
         # Defer immediately
         await interaction.response.defer(ephemeral=True)
 
-        bot.recorder = Recorder(channel=bot.voice_client.channel)
-        bot.voice_client.listen(bot.recorder)
+        bot.recorder = Recorder(channel=voice_client.channel)
+        voice_client.listen(bot.recorder)
         bot.recording = True
         
         await interaction.followup.send(
@@ -53,12 +74,12 @@ def setup_voice_commands(bot: MeetingBot):
         )
         
         # Stop if already speaking
-        if bot.voice_client.is_playing():
-            bot.voice_client.stop()
+        if voice_client.is_playing():
+            voice_client.stop()
 
         # Play audio using FFmpeg
         audio = FFmpegPCMAudio(f"{config.SPEECH_CACHE_DIR}/start.mp3")
-        bot.voice_client.play(audio)
+        voice_client.play(audio)
 
 
 
@@ -68,10 +89,15 @@ def setup_voice_commands(bot: MeetingBot):
         # Defer immediately
         await interaction.response.defer(ephemeral=True)
         
+        print("Stop command invoked.")
+        
         bot.recording = False
 
-        if bot.voice_client and bot.voice_client.is_listening():
-            bot.voice_client.stop_listening()
+        # Get voice client from Discord API
+        voice_client = get_voice_client(interaction.guild)
+        
+        if voice_client and voice_client.is_listening():
+            voice_client.stop_listening()
 
             await interaction.followup.send(
                 "Recording stopped. Processing transcription...",
@@ -79,12 +105,12 @@ def setup_voice_commands(bot: MeetingBot):
             )
             
             # Stop if already speaking
-            if bot.voice_client.is_playing():
-                bot.voice_client.stop()
+            if voice_client.is_playing():
+                voice_client.stop()
 
             # Play audio using FFmpeg
             audio = FFmpegPCMAudio(f"{config.SPEECH_CACHE_DIR}/stop.mp3")
-            bot.voice_client.play(audio)
+            voice_client.play(audio)
             
             # Spawn processing (non-blocking)
             if bot.recorder:

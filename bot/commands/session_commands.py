@@ -12,7 +12,7 @@ def setup_session_commands(bot: MeetingBot):
     async def sessions(
         interaction: Interaction,
         verbose: bool = False,
-        all: bool = False
+        show_all: bool = False
     ):
         await interaction.response.defer(ephemeral=True)
         
@@ -47,7 +47,7 @@ def setup_session_commands(bot: MeetingBot):
             
             # Check if metadata exists
             if not metadata_path.exists():
-                if all:
+                if show_all:
                     lines.append(f"🔴 **[CORRUPTED]** `{session_dir.name}`")
                 continue
             
@@ -101,7 +101,7 @@ def setup_session_commands(bot: MeetingBot):
                     )
                     
             except Exception as e:
-                if all:
+                if show_all:
                     lines.append(f"⚠️ **[ERROR]** `{session_dir.name}` - {str(e)}")
         
         # Discord has a 2000 character limit per message
