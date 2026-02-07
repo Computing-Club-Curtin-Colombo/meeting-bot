@@ -4,12 +4,11 @@ from discord.ext import commands
 from bot import MeetingBot
 from bot.commands.voice_commands import setup_voice_commands
 from bot.commands.tts_commands import setup_tts_commands
+from bot.commands.session_commands import setup_session_commands
 from bot.processing.pipeline import spawn_processing
 from bot.utils.config import BOT_TOKEN
 
-intents = discord.Intents.all()
-
-bot = MeetingBot(command_prefix="?", intents=intents)
+bot = MeetingBot(command_prefix="?", intents=discord.Intents.all())
 
 
 @bot.event
@@ -80,6 +79,7 @@ async def handle_empty_channel():
 async def run_bot():
     setup_voice_commands(bot)
     setup_tts_commands(bot)
+    setup_session_commands(bot)
     
     # Add cleanup handler
     @bot.event

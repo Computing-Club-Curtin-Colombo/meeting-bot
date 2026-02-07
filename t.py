@@ -4,4 +4,4 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-run_transcription("sessions/2026-02-06T21-14-59.490_05-30")
+run_transcription("sessions/2026-02-07T01-22-47.777_05-30")

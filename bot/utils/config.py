@@ -13,7 +13,7 @@ STOP_RECORDING_SPEECH = "Recording stopped."
 SPEECH_CACHE_DIR = "speech_cache"
 
 # AI / Whisper (Default values, will be overridden by __main__.py)
-WHISPER_MODEL = "base"
-DEVICE = "cpu"
-COMPUTE_TYPE = "int8"
+WHISPER_MODEL = "medium"
+DEVICE = "cuda"
+COMPUTE_TYPE = "float16"
 HF_CACHE_DIR = str(Path(__file__).parent.parent.parent / "hf_cache")

@@ -43,7 +43,7 @@ def setup_voice_commands(bot: MeetingBot):
         # Defer immediately
         await interaction.response.defer(ephemeral=True)
 
-        bot.recorder = Recorder()
+        bot.recorder = Recorder(channel=bot.voice_client.channel)
         bot.voice_client.listen(bot.recorder)
         bot.recording = True
         

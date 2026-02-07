@@ -16,7 +16,7 @@ from bot.utils.file_utils import (
 
 class Recorder(voice_recv.AudioSink):
 
-    def __init__(self):
+    def __init__(self, channel=None):
         super().__init__()
 
         # ----- Session -----
@@ -31,6 +31,12 @@ class Recorder(voice_recv.AudioSink):
         # ----- Metadata -----
         self.metadata = {
             "session_start": timestamp,
+            "channel": {
+                "id": str(channel.id) if channel else None,
+                "name": channel.name if channel else None,
+                "category_id": str(channel.category.id) if channel and channel.category else None,
+                "category_name": channel.category.name if channel and channel.category else None
+            },
             "users": {}
         }
 

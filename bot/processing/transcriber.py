@@ -36,7 +36,7 @@ def insert_transcript(db_path, timestamp, user_id, username, text):
         )
         conn.commit()
 
-def run_transcription(session_dir, whisper_model, device, compute_type, hf_cache_dir):
+def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=config.DEVICE, compute_type=config.COMPUTE_TYPE, hf_cache_dir=config.HF_CACHE_DIR):
     session_path = Path(session_dir) if not isinstance(session_dir, Path) else session_dir
     db_path = session_path / "transcriptions.db"
     metadata_path = session_path / "metadata.json"
