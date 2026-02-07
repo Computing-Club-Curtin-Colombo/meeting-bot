@@ -7,8 +7,12 @@ def get_system_info():
     """Detects CPU RAM and GPU VRAM if available."""
     import psutil
     import ctranslate2
+    import platform
+    import sys
     
     info = {
+        "os": f"{platform.system()} {platform.release()}",
+        "python": sys.version.split()[0],
         "ram_gb": psutil.virtual_memory().total / (1024**3),
         "gpu_available": False,
         "vram_gb": 0,
@@ -60,7 +64,7 @@ def verify_gpu_availability(sys_info):
         subprocess.check_output(["nvidia-smi"])
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("ERROR: '--gpu' flag was given, but NVIDIA drivers or 'nvidia-smi' were not found.")
-        print("Please install the latest NVIDIA drivers: https://www.nvidia.com/Download/index.aspx")
+        print("Please install the latest NVIDIA drivers: https://www.nvidia.com/Download/index.aspx\nhttps://developer.nvidia.com/cuda-12-9-1-download-archive?target_os=Windows&target_arch=x86_64&target_version=11&target_type=exe_local")
         sys.exit(1)
         
     if not sys_info["gpu_available"]:

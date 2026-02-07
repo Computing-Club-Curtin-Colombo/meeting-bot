@@ -11,3 +11,5 @@ sessions/
 t.py
 
 speech_cache/
+
+logs/

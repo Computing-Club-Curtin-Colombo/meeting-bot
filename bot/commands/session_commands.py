@@ -3,6 +3,7 @@ from discord import Interaction
 from pathlib import Path
 import json
 from datetime import datetime
+from utils.logger import logger
 
 
 def setup_session_commands(bot: MeetingBot):
@@ -14,6 +15,7 @@ def setup_session_commands(bot: MeetingBot):
         verbose: bool = False,
         show_all: bool = False
     ):
+        logger.info(f"Listing sessions (verbose={verbose}, show_all={show_all}) | Requested by {interaction.user}")
         await interaction.response.defer(ephemeral=True)
         
         sessions_dir = Path("sessions")

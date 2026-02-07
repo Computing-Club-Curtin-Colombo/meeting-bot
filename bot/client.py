@@ -7,17 +7,49 @@ from bot.commands.tts_commands import setup_tts_commands
 from bot.commands.session_commands import setup_session_commands
 from bot.processing.pipeline import spawn_processing
 from bot.utils.config import BOT_TOKEN
+from utils.logger import logger
 
 bot = MeetingBot(command_prefix="?", intents=discord.Intents.all())
 
 
 @bot.event
-async def on_ready():
-    print(f"Syncing commands...")
-    synced = await bot.tree.sync()
-    print(f"Synced {len(synced)} command(s): {[cmd.name for cmd in synced]}")
-    print(f"Logged in as {bot.user}")
+async def on_interaction(interaction):
+    """Log all slash command interactions and pass them to the CommandTree"""
+    if interaction.type == discord.InteractionType.application_command:
+        user = interaction.user
+        command_name = interaction.data.get("name", "Unknown")
+        options = interaction.data.get("options", [])
+        logger.info(f"Command '/{command_name}' called by {user} ({user.id}) | Options: {options}")
     
+    # CRITICAL: This allows the CommandTree to actually process the command!
+    await bot.tree.process_interaction(interaction)
+
+
+@bot.event
+async def on_ready():
+    logger.info("Bot is starting up...")
+    synced = await bot.tree.sync()
+    logger.info(f"Synced {len(synced)} command(s): {[cmd.name for cmd in synced]}")
+    logger.info(f"Logged in as {bot.user}")
+    
+@bot.event
+async def on_guild_channel_update(before, after):
+    # Log channel updates (like status changes) if recording
+    if bot.recording and bot.recorder:
+        our_channel = bot.voice_client.channel if bot.voice_client else None
+        if our_channel and after.id == our_channel.id:
+            # Check for status change
+            before_status = getattr(before, "status", None)
+            after_status = getattr(after, "status", None)
+            
+            if before_status != after_status:
+                bot.recorder.log_channel_update("status_change", before_status, after_status)
+            
+            # Check for name change
+            if before.name != after.name:
+                bot.recorder.log_channel_update("name_change", before.name, after.name)
+
+
 # ---------- Auto Leave When Alone ----------
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -38,7 +70,7 @@ async def on_voice_state_update(member, before, after):
 
     # ---- Bot kicked detection ----
     if member == bot.user and after.channel is None:
-        print("Bot was disconnected.")
+        logger.warning(f"Bot was disconnected from {before.channel.name if before.channel else 'unknown channel'}")
         await stop_recording()
         return
 
@@ -49,20 +81,20 @@ async def on_voice_state_update(member, before, after):
         # Avoid starting multiple timers
         if not hasattr(bot, 'leave_timer') or bot.leave_timer is None:
             bot.leave_timer = asyncio.create_task(handle_empty_channel())
-            print(f"Leave timer started (30s) for {our_channel.name}")
+            logger.info(f"Leave timer started (30s) for {our_channel.name}")
     else:
         # Someone is back, cancel the timer if it exists
         if hasattr(bot, 'leave_timer') and bot.leave_timer is not None:
             bot.leave_timer.cancel()
             bot.leave_timer = None
-            print(f"Channel {our_channel.name} no longer empty. Leave timer cancelled.")
+            logger.info(f"Channel {our_channel.name} no longer empty. Leave timer cancelled.")
 
 
 async def stop_recording():
     if not bot.recording:
         return
 
-    print("Stopping recording from client...")
+    logger.info("Stopping recording...")
     bot.recording = False
 
     if bot.voice_client and bot.voice_client.is_listening():
@@ -97,7 +129,7 @@ async def handle_empty_channel():
         humans = [m for m in channel.members if not m.bot]
 
         if len(humans) == 0:
-            print(f"Still empty after 30s. Leaving {channel.name}.")
+            logger.info(f"Still empty after 30s. Leaving {channel.name}.")
             await stop_recording()
             await bot.voice_client.disconnect()
     except asyncio.CancelledError:
@@ -114,7 +146,7 @@ async def run_bot():
     # Add cleanup handler
     @bot.event
     async def on_close():
-        print("Bot shutting down...")
+        logger.info("Bot shutting down...")
         
         # Stop recording if active
         if bot.recording:
@@ -123,5 +155,6 @@ async def run_bot():
         # Disconnect from voice
         if bot.voice_client:
             await bot.voice_client.disconnect()
+            logger.debug("Disconnected from voice client.")
     
     await bot.start(BOT_TOKEN)

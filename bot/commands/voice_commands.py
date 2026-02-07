@@ -4,6 +4,7 @@ from bot.voice.recorder import Recorder
 from bot.processing.pipeline import spawn_processing
 from discord import FFmpegPCMAudio, Interaction
 from discord.ext import voice_recv
+from utils.logger import logger
 
 def setup_voice_commands(bot: MeetingBot):
     
@@ -28,18 +29,23 @@ def setup_voice_commands(bot: MeetingBot):
     # ---------- Join Command ----------
     @bot.tree.command(name="join", description="Make the bot join your voice channel")
     async def join(interaction: Interaction):
+        # Defer immediately
+        await interaction.response.defer(ephemeral=True)
+
         if interaction.user.voice is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "You must be in a voice channel",
                 ephemeral=True
             )
             return
 
-        # Defer immediately
-        await interaction.response.defer(ephemeral=True)
-
         channel = interaction.user.voice.channel
+        logger.info(f"Attempting to join voice channel: {channel.name} ({channel.id})")
+        
         bot.voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
+        
+        logger.info(f"Connection established! Bot is now in '{channel.name}'")
+        logger.debug(f"Voice client SID: {bot.voice_client.session_id} | Endpoint: {bot.voice_client.endpoint}")
 
         await interaction.followup.send(
             "Joined voice channel",
@@ -50,23 +56,27 @@ def setup_voice_commands(bot: MeetingBot):
     # ---------- Start Recording ----------
     @bot.tree.command(name="record", description="Start recording meeting")
     async def record(interaction: Interaction):
+        # Defer immediately
+        await interaction.response.defer(ephemeral=True)
         
         # Get voice client from Discord API
         voice_client = get_voice_client(interaction.guild)
         
         if voice_client is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Bot not in voice channel! Use `/join` first.",
                 ephemeral=True
             )
             return
 
-        # Defer immediately
-        await interaction.response.defer(ephemeral=True)
-
+        logger.info(f"Initializing recording session for channel: {voice_client.channel.name}")
         bot.recorder = Recorder(channel=voice_client.channel)
+        
+        logger.debug(f"Recorder initialized. Session Path: {bot.recorder.session_dir}")
+        
         voice_client.listen(bot.recorder)
         bot.recording = True
+        logger.info("Recording sink attached and listening successfully.")
         
         await interaction.followup.send(
             "Recording started",
@@ -89,7 +99,7 @@ def setup_voice_commands(bot: MeetingBot):
         # Defer immediately
         await interaction.response.defer(ephemeral=True)
         
-        print("Stop command invoked.")
+        logger.info(f"Stop request received from {interaction.user}. Finalizing session...")
         
         bot.recording = False
 
@@ -97,7 +107,9 @@ def setup_voice_commands(bot: MeetingBot):
         voice_client = get_voice_client(interaction.guild)
         
         if voice_client and voice_client.is_listening():
+            logger.debug("Detaching recorder sink...")
             voice_client.stop_listening()
+            logger.info("Recording stopped successfully.")
 
             await interaction.followup.send(
                 "Recording stopped. Processing transcription...",
@@ -114,9 +126,8 @@ def setup_voice_commands(bot: MeetingBot):
             
             # Spawn processing (non-blocking)
             if bot.recorder:
-                print("model:", config.WHISPER_MODEL)
-                print("device:", config.DEVICE)
-                print("compute:", config.COMPUTE_TYPE)
+                logger.debug(f"Spawning transcription for {bot.recorder.session_dir}")
+                logger.debug(f"Model: {config.WHISPER_MODEL} | Device: {config.DEVICE}")
                 
                 spawn_processing(bot.recorder.session_dir, config.WHISPER_MODEL, config.DEVICE, config.COMPUTE_TYPE, config.HF_CACHE_DIR)
         else:

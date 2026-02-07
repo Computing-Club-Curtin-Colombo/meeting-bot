@@ -1,3 +1,10 @@
+import os
+
+# Enable high-speed downloads with progress bars
+# These MUST be set before importing huggingface_hub or faster_whisper
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+os.environ["PYTHONUNBUFFERED"] = "1"
+
 import sqlite3
 import json
 import bot.utils.config as config
@@ -6,6 +13,8 @@ from datetime import datetime, timedelta
 import time
 from zoneinfo import ZoneInfo
 from faster_whisper import WhisperModel
+from huggingface_hub import snapshot_download
+from utils.logger import logger
 
 COLOMBO_TZ = ZoneInfo("Asia/Colombo")
 
@@ -45,9 +54,10 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
         if metadata_path.exists():
             break
         elif _ == 4:
+             logger.error(f"metadata.json not found at {metadata_path} after multiple attempts.")
              raise FileNotFoundError(f"metadata.json not found at {metadata_path} after multiple attempts.")
          
-        print(f"Waiting for metadata.json to be available at {metadata_path}...")
+        logger.debug(f"Waiting for metadata.json to be available at {metadata_path}...")
         time.sleep(2)
 
     # Initialize Database
@@ -59,15 +69,30 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
     
     session_start = datetime.fromisoformat(metadata["session_start"])
 
+    # Explicitly download the model first to ensure progress bar visibility
+    logger.info(f"Ensuring model {whisper_model} is downloaded...")
+    repo_id = f"Systran/faster-whisper-{whisper_model}"
+    
+    # Use snapshot_download to trigger progress bars
+    try:
+        model_path = snapshot_download(
+            repo_id=repo_id,
+            cache_dir=hf_cache_dir,
+            local_files_only=False
+        )
+        logger.info(f"Model {whisper_model} ready.")
+    except Exception as e:
+        logger.warning(f"Could not explicitly check for updates: {e}. Attempting to load existing model.")
+
     # Load model with dynamic settings from config
-    print(f"Loading Whisper model: {whisper_model} on {device}...")
+    logger.info(f"Loading Whisper model: {whisper_model} on {device}...")
     model = WhisperModel(
         whisper_model,
         device=device,
         compute_type=compute_type,
         download_root=hf_cache_dir
     )
-    print("Model loaded successfully. Starting transcription...")
+    logger.info("Model loaded successfully. Starting transcription...")
 
     # Process user audio files based on metadata
     for user_id, user_info in metadata["users"].items():
@@ -78,10 +103,10 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
         audio_path = session_path / "users" / f"{user_id}.{name}.wav"
         
         if not audio_path.exists():
-            print(f"Warning: Audio file not found for {name}: {audio_path}")
+            logger.warning(f"Audio file not found for {name}: {audio_path}")
             continue
 
-        print(f"Transcribing {name}...")
+        logger.info(f"Transcribing {name}...")
         segments, info = model.transcribe(str(audio_path), beam_size=5)
 
         for segment in segments:
@@ -106,7 +131,7 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
             )
 
     # Final Step: Re-order the table physically and Export
-    print("Finalizing database (sorting rows)...")
+    logger.info("Finalizing database (sorting rows)...")
     with get_connection(db_path) as conn:
         # 1. Create a sorted temporary table
         conn.execute("CREATE TABLE transcripts_new AS SELECT * FROM transcripts ORDER BY timestamp ASC")
@@ -129,4 +154,4 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
                 pretty_time = dt.strftime("%Y-%m-%d %H:%M:%S")
                 f.write(f"[{pretty_time}] {username}: {text}\n")
             
-    print(f"Transcription finished. Full transcript saved to {export_path}")
+    logger.info(f"Transcription finished. Full transcript saved to {export_path}")

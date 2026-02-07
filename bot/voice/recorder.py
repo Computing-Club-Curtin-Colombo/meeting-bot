@@ -16,6 +16,7 @@ from bot.utils.file_utils import (
     safe_close_wav,
     save_metadata_checkpoint
 )
+from utils.logger import logger
 
 
 class Recorder(voice_recv.AudioSink):
@@ -38,6 +39,7 @@ class Recorder(voice_recv.AudioSink):
             "channel": {
                 "id": str(channel.id) if channel else None,
                 "name": channel.name if channel else None,
+                "status": getattr(channel, "status", None),
                 "category_id": str(channel.category.id) if channel and channel.category else None,
                 "category_name": channel.category.name if channel and channel.category else None
             },
@@ -98,6 +100,19 @@ class Recorder(voice_recv.AudioSink):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_offset ON events(offset_ms)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_user ON events(user_id)")
+
+        # Table for channel-wide updates (like status changes)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS channel_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                offset_ms INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                before_value TEXT,
+                after_value TEXT
+            )
+        """)
+        
         conn.commit()
         conn.close()
 
@@ -117,6 +132,15 @@ class Recorder(voice_recv.AudioSink):
     # Event Logging
     # -----------------------------------------------------
     
+    def log_channel_update(self, event_type, before_value, after_value):
+        """Push a channel-wide update to the background logging queue"""
+        timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
+        offset_ms = self.current_offset_ms()
+        
+        data = (timestamp, offset_ms, event_type, str(before_value), str(after_value))
+        self.event_queue.put(("channel_updates", data))
+        logger.debug(f"Queued channel update: {event_type} -> {after_value}")
+
     def log_event(self, member, before, after):
         """Push a voice state transition to the background logging queue"""
         
@@ -142,42 +166,46 @@ class Recorder(voice_recv.AudioSink):
             after.self_video, after.suppress, after.afk, get_iso_time(after.requested_to_speak_at)
         )
         
-        self.event_queue.put(data)
-        print(f"[EVENT] Queued voice state transition for {member.name}")
+        self.event_queue.put(("events", data))
+        logger.debug(f"Queued voice state transition for {member.name}")
 
     def _event_logger_worker(self):
         """Worker thread that writes events from the queue to the database"""
         while not self.stop_event_logger.is_set() or not self.event_queue.empty():
             try:
-                # Get item from queue with a timeout to allow checking stop_event_logger
-                data = self.event_queue.get(timeout=0.5)
+                # Get item from queue
+                table, data = self.event_queue.get(timeout=0.5)
                 
-                # Insert into database
                 conn = sqlite3.connect(str(self.events_db_path))
                 cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO events (
-                        timestamp, offset_ms, user_id, user_name,
-                        
-                        before_channel_id, before_channel_name, before_deaf, before_mute, 
-                        before_self_mute, before_self_deaf, before_self_stream, 
-                        before_self_video, before_suppress, before_afk, before_requested_to_speak_at,
-                        
-                        after_channel_id, after_channel_name, after_deaf, after_mute, 
-                        after_self_mute, after_self_deaf, after_self_stream, 
-                        after_self_video, after_suppress, after_afk, after_requested_to_speak_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, data)
+                
+                if table == "events":
+                    cursor.execute("""
+                        INSERT INTO events (
+                            timestamp, offset_ms, user_id, user_name,
+                            before_channel_id, before_channel_name, before_deaf, before_mute, 
+                            before_self_mute, before_self_deaf, before_self_stream, 
+                            before_self_video, before_suppress, before_afk, before_requested_to_speak_at,
+                            after_channel_id, after_channel_name, after_deaf, after_mute, 
+                            after_self_mute, after_self_deaf, after_self_stream, 
+                            after_self_video, after_suppress, after_afk, after_requested_to_speak_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, data)
+                elif table == "channel_updates":
+                    cursor.execute("""
+                        INSERT INTO channel_updates (timestamp, offset_ms, event_type, before_value, after_value)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, data)
+                
                 conn.commit()
                 conn.close()
-                
                 self.event_queue.task_done()
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"[ERROR] Event logger thread error: {e}")
-                time.sleep(1) # Basic crash protection
+                logger.error(f"Event logger thread error: {e}")
+                time.sleep(1)
 
     # -----------------------------------------------------
     # Add User Track
@@ -196,6 +224,7 @@ class Recorder(voice_recv.AudioSink):
             "name": user.name,
             "join_offset_ms": offset
         }
+        logger.info(f"Adding track for new user: {user.name} ({user.id})")
 
     # -----------------------------------------------------
     # Main Audio Router
@@ -222,7 +251,7 @@ class Recorder(voice_recv.AudioSink):
     def cleanup(self):
         """Cleanup recorder resources correctly"""
         # 1. Stop the event logger thread
-        print("Waiting for event logger thread to finish...")
+        logger.info("Cleaning up recorder. Finalizing logs...")
         self.stop_event_logger.set()
         if hasattr(self, 'logger_thread'):
             self.logger_thread.join(timeout=5.0)

@@ -3,6 +3,7 @@ import edge_tts
 import random
 
 from bot import MeetingBot
+from utils.logger import logger
 
 def setup_tts_commands(bot: MeetingBot):
 
@@ -10,6 +11,7 @@ def setup_tts_commands(bot: MeetingBot):
     @bot.tree.command(name="say", description="Bot speaks text")
     @app_commands.describe(text="Text for bot to speak")
     async def say(interaction: Interaction, text: str):
+        logger.info(f"TTS requested: '{text}' (Triggered by {interaction.user})")
 
         if bot.voice_client is None:
             await interaction.response.send_message(

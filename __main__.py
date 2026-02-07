@@ -15,6 +15,7 @@ from utils.hardware import (
     verify_gpu_availability
 )
 from utils.shutdown import setup_signal_handlers
+from utils.logger import logger
 
 
 async def main():
@@ -35,7 +36,10 @@ async def main():
 
     # 3. Hardware Detection
     sys_info = get_system_info()
-    print(f"System Info: RAM={sys_info['ram_gb']:.1f}GB, GPU_Available={sys_info['gpu_available']}")
+    
+    # Use the logger to show system and hardware info in the requested color format
+    logger.info(f"System: {sys_info['os']} | Python: {sys_info['python']}")
+    logger.info(f"Hardware: RAM={sys_info['ram_gb']:.1f}GB | GPU Available: {sys_info['gpu_available']}")
 
     # 4. Resolve Device and Model
     if args.cpu:
@@ -53,19 +57,18 @@ async def main():
     config.WHISPER_MODEL = args.model if args.model else best_model
     config.COMPUTE_TYPE = compute_type if device == "cuda" else "int8"
 
-    print(f"--- Configuration ---")
-    print(f"Device: {config.DEVICE}")
-    print(f"Model: {config.WHISPER_MODEL}")
-    print(f"Compute: {config.COMPUTE_TYPE}")
-    print(f"Cache: {config.HF_CACHE_DIR}")
-    print(f"---------------------")
+    logger.info("Configuration set:")
+    logger.info(f"  > Device:  {config.DEVICE}")
+    logger.info(f"  > Model:   {config.WHISPER_MODEL}")
+    logger.info(f"  > Compute: {config.COMPUTE_TYPE}")
+    logger.info(f"  > Cache:   {config.HF_CACHE_DIR}")
 
     # 6. Pre-flight checks (Prepared speech files)
-    print("Generating pre-cached speech files...")
+    logger.debug("Generating pre-cached speech files...")
     await generate_prepared_speech_files()
 
     # 7. Start Bot
-    print("Starting bot...")
+    logger.info("Initiating bot main loop...")
     await run_bot()
 
 
@@ -79,8 +82,8 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nBot stopped by user.")
+        logger.warning("Bot stopped by user (KeyboardInterrupt).")
     except Exception as e:
-        print(f"\nError: {e}")
+        logger.critical(f"FATAL ERROR: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
