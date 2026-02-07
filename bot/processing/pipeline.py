@@ -17,9 +17,13 @@ def spawn_processing(session_dir, whisper_model, device, compute_type, hf_cache_
     _cleanup_finished_processes()
 
 def _cleanup_finished_processes():
-    """Remove finished processes from tracking list"""
+    """Remove finished processes from tracking list and release handles"""
     global _active_processes
-    _active_processes = [p for p in _active_processes if p.is_alive()]
+    # Check for finished processes
+    for p in _active_processes[:]:
+        if not p.is_alive():
+            p.join() # Properly clean up the process handle
+            _active_processes.remove(p)
 
 def terminate_all_processes():
     """Terminate all active transcription processes"""

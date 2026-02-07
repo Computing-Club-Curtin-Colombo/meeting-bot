@@ -155,3 +155,7 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
                 f.write(f"[{pretty_time}] {username}: {text}\n")
             
     logger.info(f"Transcription finished. Full transcript saved to {export_path}")
+    
+    # Force exit to ensure the sub-process terminates completely and releases all resources (GPU/RAM)
+    import os
+    os._exit(0)

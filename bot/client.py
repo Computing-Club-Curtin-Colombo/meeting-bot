@@ -51,6 +51,19 @@ async def on_ready():
     logger.info(f"Synced {len(synced)} command(s): {[cmd.name for cmd in synced]}")
     logger.info(f"Logged in as {bot.user}")
     
+    # Start background task to clean up finished transcription processes
+    bot.loop.create_task(periodic_process_cleanup())
+
+async def periodic_process_cleanup():
+    """Background task to clean up finished subprocesses every 60 seconds"""
+    from bot.processing.pipeline import _cleanup_finished_processes
+    while True:
+        try:
+            _cleanup_finished_processes()
+        except Exception as e:
+            logger.error(f"Error in periodic process cleanup: {e}")
+        await asyncio.sleep(60)
+    
 # ---------- Auto Leave When Alone ----------
 @bot.event
 async def on_voice_state_update(member, before, after):
