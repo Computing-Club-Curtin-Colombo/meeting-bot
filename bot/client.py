@@ -34,7 +34,7 @@ async def on_message(message):
 
     # Check if this is an active recording session with a thread
     if bot.recording and bot.recorder:
-        thread_id = bot.recorder.metadata.get("thread_id")
+        thread_id = getattr(bot.recorder, "thread_id", None)
         if thread_id and str(message.channel.id) == thread_id:
             # Long content handling
             content = message.clean_content

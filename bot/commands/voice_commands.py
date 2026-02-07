@@ -156,8 +156,8 @@ def setup_voice_commands(bot: MeetingBot):
             )
             logger.info(f"Created meeting notes thread: {thread_title}")
             
-            # Store thread ID in metadata for future reference
-            bot.recorder.metadata["thread_id"] = str(thread.id)
+            # Store thread ID as an attribute (not in metadata dict to avoid saving to file)
+            bot.recorder.thread_id = str(thread.id)
             
             await thread.send(f"**Meeting Started!** Use this thread to add notes. I will log everything here into the meeting database.")
         except Exception as e:
@@ -197,7 +197,7 @@ def setup_voice_commands(bot: MeetingBot):
             logger.info("Recording stopped successfully.")
             
             # Archive the meeting notes thread if it exists
-            thread_id = bot.recorder.metadata.get("thread_id")
+            thread_id = getattr(bot.recorder, "thread_id", None)
             if thread_id:
                 try:
                     thread = interaction.guild.get_thread(int(thread_id))

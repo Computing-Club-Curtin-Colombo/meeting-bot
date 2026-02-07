@@ -12,7 +12,7 @@ def setup_session_commands(bot: MeetingBot):
     @bot.tree.command(name="sessions", description="List all recording sessions")
     async def sessions(
         interaction: Interaction,
-        verbose: bool = False,
+        verbose: bool = True,
         show_all: bool = False
     ):
         logger.info(f"Listing sessions (verbose={verbose}, show_all={show_all}) | Requested by {interaction.user}")
