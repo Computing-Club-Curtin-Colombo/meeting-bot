@@ -113,6 +113,18 @@ class Recorder(voice_recv.AudioSink):
             )
         """)
         
+        # Table for meeting notes (user messages in the meeting thread)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                offset_ms INTEGER NOT NULL,
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL,
+                content TEXT NOT NULL
+            )
+        """)
+        
         conn.commit()
         conn.close()
 
@@ -169,6 +181,15 @@ class Recorder(voice_recv.AudioSink):
         self.event_queue.put(("events", data))
         logger.debug(f"Queued voice state transition for {member.name}")
 
+    def log_note(self, member, content):
+        """Push a meeting note (text message) to the background logging queue"""
+        timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
+        offset_ms = self.current_offset_ms()
+        
+        data = (timestamp, offset_ms, str(member.id), member.name, content)
+        self.event_queue.put(("notes", data))
+        logger.info(f"Note logged by {member.name}: {content[:30]}...")
+
     def _event_logger_worker(self):
         """Worker thread that writes events from the queue to the database"""
         while not self.stop_event_logger.is_set() or not self.event_queue.empty():
@@ -195,6 +216,11 @@ class Recorder(voice_recv.AudioSink):
                 elif table == "channel_updates":
                     cursor.execute("""
                         INSERT INTO channel_updates (timestamp, offset_ms, event_type, before_value, after_value)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, data)
+                elif table == "notes":
+                    cursor.execute("""
+                        INSERT INTO notes (timestamp, offset_ms, user_id, user_name, content)
                         VALUES (?, ?, ?, ?, ?)
                     """, data)
                 

@@ -1,10 +1,12 @@
+import discord
 from bot import MeetingBot
 import bot.utils.config as config
 from bot.voice.recorder import Recorder
 from bot.processing.pipeline import spawn_processing
-from discord import FFmpegPCMAudio, Interaction
+from discord import FFmpegPCMAudio, Interaction, ChannelType
 from discord.ext import voice_recv
 from utils.logger import logger
+from datetime import datetime
 
 def setup_voice_commands(bot: MeetingBot):
     
@@ -78,6 +80,48 @@ def setup_voice_commands(bot: MeetingBot):
         bot.recording = True
         logger.info("Recording sink attached and listening successfully.")
         
+        # Create a thread for meeting notes
+        try:
+            # VoiceChannels (chat in voice) don't support threads. 
+            # We must find a compatible TextChannel.
+            target_channel = interaction.channel
+            if target_channel.type == ChannelType.voice:
+                logger.debug("Command invoked in Voice Channel chat. Searching for sibling Text Channel...")
+                # 1. Try same category
+                if target_channel.category:
+                    for ch in target_channel.category.text_channels:
+                        target_channel = ch
+                        break
+                
+                # 2. Fallback to any text channel in guild if still pointing to voice
+                if target_channel.type == ChannelType.voice:
+                    for ch in interaction.guild.text_channels:
+                        target_channel = ch
+                        break
+            
+            if target_channel.type == ChannelType.voice:
+                logger.error("No compatible text channel found to create meeting notes thread.")
+                return
+
+            now = datetime.now()
+            day = now.day
+            suffix = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+            thread_title = f"Meeting Notes [{day}{suffix} {now.strftime('%b, %Y | %H:%M')}]"
+            
+            thread = await target_channel.create_thread(
+                name=thread_title,
+                auto_archive_duration=10080, # 7 days (max)
+                type=ChannelType.public_thread
+            )
+            logger.info(f"Created meeting notes thread: {thread_title}")
+            
+            # Store thread ID in metadata for future reference
+            bot.recorder.metadata["thread_id"] = str(thread.id)
+            
+            await thread.send(f"**Meeting Started!** Use this thread to add notes. I will log everything here into the meeting database.")
+        except Exception as e:
+            logger.error(f"Failed to create meeting notes thread: {e}")
+
         await interaction.followup.send(
             "Recording started",
             ephemeral=True
@@ -110,6 +154,18 @@ def setup_voice_commands(bot: MeetingBot):
             logger.debug("Detaching recorder sink...")
             voice_client.stop_listening()
             logger.info("Recording stopped successfully.")
+            
+            # Archive the meeting notes thread if it exists
+            thread_id = bot.recorder.metadata.get("thread_id")
+            if thread_id:
+                try:
+                    thread = interaction.guild.get_thread(int(thread_id))
+                    if thread:
+                        logger.info(f"Archiving meeting notes thread: {thread.name}")
+                        await thread.send("Meeting stopped. This thread is now archived.")
+                        await thread.edit(archived=True, locked=True)
+                except Exception as e:
+                    logger.error(f"Failed to archive thread: {e}")
 
             await interaction.followup.send(
                 "Recording stopped. Processing transcription...",

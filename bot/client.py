@@ -26,6 +26,25 @@ async def on_interaction(interaction):
 
 
 @bot.event
+async def on_message(message):
+    """Log meeting notes from the dedicated thread"""
+    # Ignore bot messages
+    if message.author.bot:
+        return
+
+    # Check if this is an active recording session with a thread
+    if bot.recording and bot.recorder:
+        thread_id = bot.recorder.metadata.get("thread_id")
+        if thread_id and str(message.channel.id) == thread_id:
+            # Long content handling
+            content = message.clean_content
+            bot.recorder.log_note(message.author, content)
+
+    # Process standard commands if any exist
+    await bot.process_commands(message)
+
+
+@bot.event
 async def on_ready():
     logger.info("Bot is starting up...")
     synced = await bot.tree.sync()
