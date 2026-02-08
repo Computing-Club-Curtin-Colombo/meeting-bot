@@ -244,7 +244,6 @@ class Recorder(voice_recv.AudioSink):
     # -----------------------------------------------------
     # Main Audio Router
     # -----------------------------------------------------
-
     def write(self, user, data):
 
         if not data.pcm:
@@ -253,9 +252,6 @@ class Recorder(voice_recv.AudioSink):
         # Add track dynamically
         if user.id not in self.tracks:
             self.add_user(user)
-
-        packet_size = len(data.pcm)
-        silence = bytes(packet_size)
         
         self.tracks[user.id].enqueue(data.pcm)
 
