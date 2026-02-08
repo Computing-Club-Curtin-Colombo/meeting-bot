@@ -154,7 +154,17 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
                 pretty_time = dt.strftime("%Y-%m-%d %H:%M:%S")
                 f.write(f"[{pretty_time}] {username}: {text}\n")
             
+            
     logger.info(f"Transcription finished. Full transcript saved to {export_path}")
+
+    # Generate Prompt File for LLM
+    try:
+        from bot.processing.prompt_generator import generate_prompt
+        logger.info("Generating PROMPT1 for LLM extraction...")
+        generate_prompt(session_dir)
+        logger.info("PROMPT1 generated successfully.")
+    except Exception as e:
+        logger.error(f"Failed to generate PROMPT1: {e}")
     
     # Force exit to ensure the sub-process terminates completely and releases all resources (GPU/RAM)
     import os
