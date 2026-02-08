@@ -42,8 +42,7 @@ def sanitize_filename(name: str):
 
 
 def create_user_wav_path(users_dir, user):
-    safe_name = sanitize_filename(user.name)
-    return users_dir / f"{user.id}.{safe_name}.wav"
+    return users_dir / f"{user.id}.wav"
 
 
 # =========================================================

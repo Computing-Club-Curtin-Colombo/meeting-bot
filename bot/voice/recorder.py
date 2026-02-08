@@ -21,13 +21,10 @@ from utils.logger import logger
 
 class Recorder(voice_recv.AudioSink):
 
-    def __init__(self, channel=None, title=None, model=None, device=None, compute_type=None):
+    def __init__(self, channel=None, title=None):
         super().__init__()
         
         from bot.utils import config
-        self.model = model or config.WHISPER_MODEL
-        self.device = device or config.DEVICE
-        self.compute_type = compute_type or config.COMPUTE_TYPE
 
         # ----- Session -----
         timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
@@ -41,24 +38,30 @@ class Recorder(voice_recv.AudioSink):
         # ----- Metadata -----
         self.metadata = {
             "session_start": timestamp,
+            "session_end": None,
             "title": title,
-            "whisper": {
-                "model": self.model,
-                "device": self.device,
-                "compute_type": self.compute_type
+            "participant_count": 0,
+            "models": {
+                "transcriber": {
+                    "model": config.WHISPER_MODEL,
+                    "device": config.DEVICE,
+                    "compute_type": config.COMPUTE_TYPE
+                },
+                "summarizer": {
+                    "model": config.LLM_MODEL
+                }
             },
             "channel": {
                 "id": str(channel.id) if channel else None,
                 "name": channel.name if channel else None,
                 "category_id": str(channel.category.id) if channel and channel.category else None,
                 "category_name": channel.category.name if channel and channel.category else None
-            },
-            "users": {}
+            }
         }
         
-        # ----- Events Database -----
-        self.events_db_path = self.session_dir / "events.db"
-        self._init_events_db()
+        # ----- Meeting Database -----
+        self.db_path = self.session_dir / "meeting.db"
+        self._init_db()
         
         # ----- Threaded Event Logger -----
         self.event_queue = queue.Queue()
@@ -66,19 +69,17 @@ class Recorder(voice_recv.AudioSink):
         self.logger_thread = threading.Thread(target=self._event_logger_worker, daemon=True)
         self.logger_thread.start()
 
-    def _init_events_db(self):
-        """Initialize the events database with columns for all VoiceState attributes"""
-        conn = sqlite3.connect(str(self.events_db_path))
+    def _init_db(self):
+        """Initialize the meeting database with events, notes, and transcriptions tables"""
+        conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
         
-        # We store both 'before' and 'after' states for all attributes
+        # 1. Voice Events table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
-                offset_ms INTEGER NOT NULL,
                 user_id TEXT NOT NULL,
-                user_name TEXT NOT NULL,
                 
                 -- Before states
                 before_channel_id TEXT,
@@ -107,23 +108,41 @@ class Recorder(voice_recv.AudioSink):
                 after_requested_to_speak_at TEXT
             )
         """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON events(timestamp)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_offset ON events(offset_ms)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user ON events(user_id)")
-
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user ON events(user_id)")
         
-        # Table for meeting notes (user messages in the meeting thread)
+        # 2. Meeting Notes table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
-                offset_ms INTEGER NOT NULL,
                 user_id TEXT NOT NULL,
-                user_name TEXT NOT NULL,
                 content TEXT NOT NULL
             )
         """)
+
+        # 3. Transcriptions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transcriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                text TEXT NOT NULL
+            )
+        """)
+        
+        # 4. Users lookup table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                user_name TEXT NOT NULL,
+                nick_name TEXT,
+                is_bot BOOLEAN NOT NULL,
+                join_offset_ms INTEGER NOT NULL
+            )
+        """)
+        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp_events ON events(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp_notes ON notes(timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp_trans ON transcriptions(timestamp)")
         
         conn.commit()
         conn.close()
@@ -150,9 +169,8 @@ class Recorder(voice_recv.AudioSink):
     def log_event(self, member, before, after):
         """Push a voice state transition to the background logging queue"""
         
-        # Capture current time and offset immediately to ensure accuracy
+        # Capture current time immediately to ensure accuracy
         timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
-        offset_ms = self.current_offset_ms()
         
         # Helper to extract channel info
         def get_chan_id(state): return str(state.channel.id) if state.channel else None
@@ -161,7 +179,7 @@ class Recorder(voice_recv.AudioSink):
 
         # Prepare payload for the background thread
         data = (
-            timestamp, offset_ms, str(member.id), member.name,
+            timestamp, str(member.id),
             
             get_chan_id(before), get_chan_name(before), before.deaf, before.mute,
             before.self_mute, before.self_deaf, before.self_stream,
@@ -178,9 +196,8 @@ class Recorder(voice_recv.AudioSink):
     def log_note(self, member, content):
         """Push a meeting note (text message) to the background logging queue"""
         timestamp = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
-        offset_ms = self.current_offset_ms()
         
-        data = (timestamp, offset_ms, str(member.id), member.name, content)
+        data = (timestamp, str(member.id), content)
         self.event_queue.put(("notes", data))
         logger.info(f"Note logged by {member.name}: {content[:30]}...")
 
@@ -191,13 +208,13 @@ class Recorder(voice_recv.AudioSink):
                 # Get item from queue
                 table, data = self.event_queue.get(timeout=0.5)
                 
-                conn = sqlite3.connect(str(self.events_db_path))
+                conn = sqlite3.connect(str(self.db_path))
                 cursor = conn.cursor()
                 
                 if table == "events":
                     cursor.execute("""
                         INSERT INTO events (
-                            timestamp, offset_ms, user_id, user_name,
+                            timestamp, user_id,
                             before_channel_id, before_channel_name, before_deaf, before_mute, 
                             before_self_mute, before_self_deaf, before_self_stream, 
                             before_self_video, before_suppress, before_afk, before_requested_to_speak_at,
@@ -205,12 +222,12 @@ class Recorder(voice_recv.AudioSink):
                             after_self_mute, after_self_deaf, after_self_stream, 
                             after_self_video, after_suppress, after_afk, after_requested_to_speak_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, data)
                 elif table == "notes":
                     cursor.execute("""
-                        INSERT INTO notes (timestamp, offset_ms, user_id, user_name, content)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO notes (timestamp, user_id, content)
+                        VALUES (?, ?, ?)
                     """, data)
                 
                 conn.commit()
@@ -227,19 +244,32 @@ class Recorder(voice_recv.AudioSink):
     # -----------------------------------------------------
 
     def add_user(self, user):
-
         filepath = create_user_wav_path(self.users_dir, user)
-
         track = UserTrack(filepath)
         self.tracks[user.id] = track
 
         offset = self.current_offset_ms()
+        nick = user.display_name if user.display_name != user.name else None
 
-        self.metadata["users"][str(user.id)] = {
-            "name": user.name,
-            "join_offset_ms": offset
-        }
-        logger.info(f"Adding track for new user: {user.name} ({user.id})")
+        # Store user info in DB instead of metadata
+        conn = sqlite3.connect(str(self.db_path))
+        conn.execute("""
+            INSERT OR REPLACE INTO users (user_id, user_name, nick_name, is_bot, join_offset_ms)
+            VALUES (?, ?, ?, ?, ?)
+        """, (str(user.id), user.name, nick, user.bot, offset))
+        conn.commit()
+        conn.close()
+
+        # Update non-bot participant count in metadata
+        if not user.bot:
+            self.metadata["participant_count"] = len([t for uid, t in self.tracks.items() if not getattr(t, 'is_bot', False)]) # This is a bit complex, let's simplify
+
+        logger.info(f"Adding track for new user: {user.display_name} ({user.id})")
+
+    async def _update_participant_count(self):
+        """Helper to keep participant count updated"""
+        # This will be called from outside if needed or calculated at end
+        pass
 
     # -----------------------------------------------------
     # Main Audio Router
@@ -271,5 +301,14 @@ class Recorder(voice_recv.AudioSink):
         for track in self.tracks.values():
             track.stop()
 
-        # 3. Save final metadata
+        # 3. Finalize Metadata
+        self.metadata["session_end"] = datetime.now(ZoneInfo("Asia/Colombo")).isoformat(timespec="milliseconds")
+        
+        # Calculate final non-bot participant count from DB
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users WHERE is_bot = 0")
+        self.metadata["participant_count"] = cursor.fetchone()[0]
+        conn.close()
+
         save_metadata_checkpoint(self.session_dir, self.metadata)

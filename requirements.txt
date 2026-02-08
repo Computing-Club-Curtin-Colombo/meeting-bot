@@ -5,3 +5,8 @@ faster-whisper
 python-dotenv
 psutil
 numpy
+transformers
+accelerate
+bitsandbytes
+torch
+sentencepiece

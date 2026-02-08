@@ -34,3 +34,6 @@ def install_all_dependencies():
     ensure_dependency("faster-whisper", 
                      ["faster_whisper", "ctranslate2", "hf_transfer"],
                      ["faster-whisper", "hf-transfer", "ctranslate2"])
+    ensure_dependency("LLM Summarizer", 
+                     ["transformers", "accelerate", "bitsandbytes", "torch", "sentencepiece"],
+                     ["transformers", "accelerate", "bitsandbytes", "torch", "sentencepiece"])

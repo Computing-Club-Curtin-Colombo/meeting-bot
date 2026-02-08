@@ -17,3 +17,6 @@ WHISPER_MODEL = "base"
 DEVICE = "cuda"
 COMPUTE_TYPE = "float16"
 HF_CACHE_DIR = str(Path(__file__).parent.parent.parent / "hf_cache")
+
+# LLM / Summarizer
+LLM_MODEL = "auto"

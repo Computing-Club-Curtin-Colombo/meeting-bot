@@ -58,28 +58,11 @@ def setup_voice_commands(bot: MeetingBot):
     # ---------- Start Recording ----------
     @bot.tree.command(name="record", description="Start recording meeting")
     @discord.app_commands.describe(
-        title="Optional title for the meeting",
-        model="Whisper model to use (tiny, base, small, medium, large-v3)",
-        device="Device to run transcription on (cuda, cpu)"
-    )
-    @discord.app_commands.choices(
-        model=[
-            discord.app_commands.Choice(name="tiny", value="tiny"),
-            discord.app_commands.Choice(name="base", value="base"),
-            discord.app_commands.Choice(name="small", value="small"),
-            discord.app_commands.Choice(name="medium", value="medium"),
-            discord.app_commands.Choice(name="large-v3", value="large-v3")
-        ],
-        device=[
-            discord.app_commands.Choice(name="cuda", value="cuda"),
-            discord.app_commands.Choice(name="cpu", value="cpu")
-        ]
+        title="Optional title for the meeting"
     )
     async def record(
         interaction: Interaction, 
-        title: str = None, 
-        model: str = None,
-        device: str = None
+        title: str = None
     ):
         # Defer immediately
         await interaction.response.defer(ephemeral=True)
@@ -94,20 +77,15 @@ def setup_voice_commands(bot: MeetingBot):
             )
             return
 
-        if device == "cuda":
-            compute_type = "float16"
-        elif device == "cpu":
-            compute_type = "int8"
-        else:
-            compute_type = None # Use default
+        # Use defaults from global config
+        model = config.WHISPER_MODEL
+        device = config.DEVICE
+        compute_type = config.COMPUTE_TYPE
 
         logger.info(f"Initializing recording session for channel: {voice_client.channel.name} (Title: {title})")
         bot.recorder = Recorder(
             channel=voice_client.channel, 
-            title=title,
-            model=model,
-            device=device,
-            compute_type=compute_type
+            title=title
         )
         
         logger.debug(f"Recorder initialized. Session Path: {bot.recorder.session_dir}")
@@ -223,10 +201,11 @@ def setup_voice_commands(bot: MeetingBot):
             
             # Spawn processing (non-blocking)
             if bot.recorder:
-                w_meta = bot.recorder.metadata.get("whisper", {})
-                w_model = w_meta.get("model", config.WHISPER_MODEL)
-                w_device = w_meta.get("device", config.DEVICE)
-                w_compute = w_meta.get("compute_type", config.COMPUTE_TYPE)
+                m_meta = bot.recorder.metadata.get("models", {})
+                t_meta = m_meta.get("transcriber", {})
+                w_model = t_meta.get("model", config.WHISPER_MODEL)
+                w_device = t_meta.get("device", config.DEVICE)
+                w_compute = t_meta.get("compute_type", config.COMPUTE_TYPE)
                 
                 logger.debug(f"Spawning transcription for {bot.recorder.session_dir}")
                 logger.info(f"Using settings -> Model: {w_model} | Device: {w_device} | Compute: {w_compute}")

@@ -5,6 +5,7 @@ from bot import MeetingBot
 from bot.commands.voice_commands import setup_voice_commands
 from bot.commands.tts_commands import setup_tts_commands
 from bot.commands.session_commands import setup_session_commands
+from bot.commands.config_commands import setup_config_commands
 from bot.processing.pipeline import spawn_processing
 from bot.utils.config import BOT_TOKEN
 from utils.logger import logger
@@ -118,12 +119,13 @@ async def stop_recording():
         # First, ensure the recorder saves its metadata
         bot.recorder.cleanup()
         
-        # Pull settings from metadata if possible
+        # Pull settings from metadata
         from bot.utils import config
-        w_meta = bot.recorder.metadata.get("whisper", {})
-        w_model = w_meta.get("model", config.WHISPER_MODEL)
-        w_device = w_meta.get("device", config.DEVICE)
-        w_compute = w_meta.get("compute_type", config.COMPUTE_TYPE)
+        m_meta = bot.recorder.metadata.get("models", {})
+        t_meta = m_meta.get("transcriber", {})
+        w_model = t_meta.get("model", config.WHISPER_MODEL)
+        w_device = t_meta.get("device", config.DEVICE)
+        w_compute = t_meta.get("compute_type", config.COMPUTE_TYPE)
 
         # Then spawn processing with ALL required arguments
         spawn_processing(
@@ -162,6 +164,7 @@ async def run_bot():
     setup_voice_commands(bot)
     setup_tts_commands(bot)
     setup_session_commands(bot)
+    setup_config_commands(bot)
     
     # Add cleanup handler
     @bot.event

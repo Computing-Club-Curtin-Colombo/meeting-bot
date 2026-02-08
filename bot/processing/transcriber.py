@@ -24,30 +24,29 @@ def get_connection(db_path):
 def init_db(db_path):
     with get_connection(db_path) as conn:
         conn.execute("""
-        CREATE TABLE IF NOT EXISTS transcripts (
+        CREATE TABLE IF NOT EXISTS transcriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
             user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
             text TEXT NOT NULL
         )
         """)
         conn.commit()
 
-def insert_transcript(db_path, timestamp, user_id, username, text):
+def insert_transcript(db_path, timestamp, user_id, text):
     with get_connection(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO transcripts (timestamp, user_id, username, text)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO transcriptions (timestamp, user_id, text)
+            VALUES (?, ?, ?)
             """,
-            (timestamp, str(user_id), username, text)
+            (timestamp, str(user_id), text)
         )
         conn.commit()
 
 def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=config.DEVICE, compute_type=config.COMPUTE_TYPE, hf_cache_dir=config.HF_CACHE_DIR):
     session_path = Path(session_dir) if not isinstance(session_dir, Path) else session_dir
-    db_path = session_path / "transcriptions.db"
+    db_path = session_path / "meeting.db"
     metadata_path = session_path / "metadata.json"
     
     for _ in range(5):  # Retry mechanism for file access
@@ -63,26 +62,16 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
     # Initialize Database
     init_db(db_path)
 
-    # Load Metadata
+    # Load Metadata for session start
     with open(metadata_path, "r", encoding="utf8") as f:
         metadata = json.load(f)
     
     session_start = datetime.fromisoformat(metadata["session_start"])
 
-    # Explicitly download the model first to ensure progress bar visibility
-    logger.info(f"Ensuring model {whisper_model} is downloaded...")
-    repo_id = f"Systran/faster-whisper-{whisper_model}"
-    
-    # Use snapshot_download to trigger progress bars
-    try:
-        model_path = snapshot_download(
-            repo_id=repo_id,
-            cache_dir=hf_cache_dir,
-            local_files_only=False
-        )
-        logger.info(f"Model {whisper_model} ready.")
-    except Exception as e:
-        logger.warning(f"Could not explicitly check for updates: {e}. Attempting to load existing model.")
+    # Load Users from Database
+    with get_connection(db_path) as conn:
+        cursor = conn.execute("SELECT user_id, user_name, nick_name, join_offset_ms FROM users")
+        members = cursor.fetchall()
 
     # Load model with dynamic settings from config
     logger.info(f"Loading Whisper model: {whisper_model} on {device}...")
@@ -94,19 +83,18 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
     )
     logger.info("Model loaded successfully. Starting transcription...")
 
-    # Process user audio files based on metadata
-    for user_id, user_info in metadata["users"].items():
-        name = user_info["name"]
-        join_offset_ms = user_info["join_offset_ms"]
+    # Process user audio files based on database records
+    for user_id, user_name, nick_name, join_offset_ms in members:
+        name_for_logs = nick_name or user_name
         
         # Look for the wav file
-        audio_path = session_path / "users" / f"{user_id}.{name}.wav"
+        audio_path = session_path / "users" / f"{user_id}.wav"
         
         if not audio_path.exists():
-            logger.warning(f"Audio file not found for {name}: {audio_path}")
+            logger.warning(f"Audio file not found for {name_for_logs}: {audio_path}")
             continue
 
-        logger.info(f"Transcribing {name}...")
+        logger.info(f"Transcribing {name_for_logs}...")
         segments, info = model.transcribe(str(audio_path), beam_size=5)
 
         for segment in segments:
@@ -126,36 +114,22 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
                 db_path,
                 timestamp_str,
                 user_id,
-                name,
                 segment.text.strip()
             )
 
-    # Final Step: Re-order the table physically and Export
+    # Final Step: Re-order the table physically
     logger.info("Finalizing database (sorting rows)...")
     with get_connection(db_path) as conn:
         # 1. Create a sorted temporary table
-        conn.execute("CREATE TABLE transcripts_new AS SELECT * FROM transcripts ORDER BY timestamp ASC")
+        conn.execute("CREATE TABLE trans_new AS SELECT * FROM transcriptions ORDER BY timestamp ASC")
         
         # 2. Replace old table with sorted one
-        conn.execute("DROP TABLE transcripts")
-        conn.execute("ALTER TABLE transcripts_new RENAME TO transcripts")
+        conn.execute("DROP TABLE transcriptions")
+        conn.execute("ALTER TABLE trans_new RENAME TO transcriptions")
         
         # 3. Add an index for future fast lookups
-        conn.execute("CREATE INDEX idx_timestamp ON transcripts(timestamp)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trans_timestamp ON transcriptions(timestamp)")
         conn.commit()
-
-        # 4. Stream rows to file (low memory usage)
-        export_path = session_path / "transcript.txt"
-        cursor = conn.execute("SELECT timestamp, username, text FROM transcripts") # No ORDER BY needed now
-        
-        with open(export_path, "w", encoding="utf-8") as f:
-            for timestamp, username, text in cursor:
-                dt = datetime.fromisoformat(timestamp)
-                pretty_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-                f.write(f"[{pretty_time}] {username}: {text}\n")
-            
-            
-    logger.info(f"Transcription finished. Full transcript saved to {export_path}")
 
     # Generate Prompt File for LLM
     try:
@@ -163,8 +137,13 @@ def run_transcription(session_dir, whisper_model=config.WHISPER_MODEL, device=co
         logger.info("Generating PROMPT1 for LLM extraction...")
         generate_prompt(session_dir)
         logger.info("PROMPT1 generated successfully.")
+        
+        # Trigger LLM Summarization
+        from bot.processing.summarizer import run_llm_processing
+        run_llm_processing(session_dir)
+        
     except Exception as e:
-        logger.error(f"Failed to generate PROMPT1: {e}")
+        logger.error(f"Failed to generate PROMPT1 or run LLM: {e}")
     
     # Force exit to ensure the sub-process terminates completely and releases all resources (GPU/RAM)
     import os
